@@ -1,0 +1,31 @@
+{
+  "name": "clawdbot-skills",
+  "version": "1.0.0",
+  "description": "Free, open-source skills for Clawdbot AI agent framework",
+  "author": "zedit42",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zedit42/clawdbot-skills.git"
+  },
+  "keywords": [
+    "clawdbot",
+    "ai-agent",
+    "automation",
+    "web-scraping",
+    "tts",
+    "voice-cloning",
+    "browser-automation"
+  ],
+  "dependencies": {
+    "puppeteer": "^21.0.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "optionalDependencies": {
+    "puppeteer-real-browser": "^1.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
