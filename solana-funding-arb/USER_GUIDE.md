@@ -1,73 +1,73 @@
 # 🚀 Solana Funding Rate Arbitrage Scanner
 
-## Boşta Duran Coinlerini Değerlendir!
+## Put Your Idle Coins to Work!
 
-Bu araç, Solana üzerindeki perpetual DEX'lerdeki funding rate farklarını tarayarak **delta-neutral arbitraj fırsatları** bulur.
+This tool scans funding rates across Solana perpetual DEXes to find **delta-neutral arbitrage opportunities**.
 
-## 💡 Nasıl Çalışır?
+## 💡 How It Works
 
-Perpetual futures'larda "funding rate" mekanizması var:
-- **Pozitif rate**: Long'lar Short'lara ödeme yapar
-- **Negatif rate**: Short'lar Long'lara ödeme yapar
+Perpetual futures have a "funding rate" mechanism:
+- **Positive rate**: Longs pay Shorts
+- **Negative rate**: Shorts pay Longs
 
-Farklı DEX'lerde aynı coin için farklı funding rate'ler olabiliyor. Bu farkı kullanarak:
+Different DEXes can have different funding rates for the same asset. By exploiting this difference:
 
 ```
-DEX A: SOL Funding = -500% APY (Long'lar kazanır)
-DEX B: SOL Funding = +800% APY (Short'lar kazanır)
+DEX A: SOL Funding = -500% APY (Longs earn)
+DEX B: SOL Funding = +800% APY (Shorts earn)
 
-Strateji:
-→ DEX A'da Long aç (funding al)
-→ DEX B'de Short aç (funding al)
-→ Fiyat riski yok (hedge'li)
-→ Her iki taraftan da funding kazan!
+Strategy:
+→ Open Long on DEX A (receive funding)
+→ Open Short on DEX B (receive funding)
+→ Zero price risk (hedged)
+→ Collect funding from both sides!
 ```
 
-## 📊 Desteklenen DEX'ler
+## 📊 Supported DEXes
 
-| DEX | Market Sayısı | Özellik |
-|-----|---------------|---------|
-| Drift Protocol | 64 | En büyük Solana perp DEX |
-| Flash Trade | 19 | Düşük fee'ler |
-| GMTrade | 37 | GMX-Solana |
+| DEX | Markets | Features |
+|-----|---------|----------|
+| Drift Protocol | 64 | Largest Solana perp DEX |
+| Flash Trade | 19 | Low fees |
+| GMTrade | 37 | GMX on Solana |
 | Zeta Markets | 24 | Options + Perps |
 
-## 🛠️ Kurulum
+## 🛠️ Installation
 
-### 1. Gereksinimler
-- Node.js 18 veya üzeri
-- npm veya pnpm
+### 1. Requirements
+- Node.js 18 or higher
+- npm or pnpm
 
-### 2. Kurulum
+### 2. Setup
 ```bash
 cd scripts
 npm install
 ```
 
-### 3. Yapılandırma (Opsiyonel)
+### 3. Configuration (Optional)
 
-`.env` dosyası oluştur:
+Create a `.env` file:
 ```bash
 cp .env.example .env
 ```
 
-**Önerilen:** Helius RPC key al (ücretsiz):
-1. https://helius.xyz adresine git
-2. Ücretsiz hesap oluştur
-3. API key'i al
-4. `.env` dosyasına ekle:
+**Recommended:** Get a free Helius RPC key:
+1. Go to https://helius.xyz
+2. Create a free account
+3. Copy your API key
+4. Add to `.env`:
 ```env
-SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=SENIN_KEY
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
 ```
 
-## 🚀 Kullanım
+## 🚀 Usage
 
-### CLI Tarayıcı
+### CLI Scanner
 ```bash
 npm run scan
 ```
 
-Çıktı:
+Output:
 ```
 ═══════════════════════════════════════════════════════════════
 ⚡ SOLANA DEX FUNDING RATE COMPARISON
@@ -83,53 +83,76 @@ BTC     | 🟢 -617%    | 🔴 +2330%   | 2947%   | Long Drift, Short Flash
 ```bash
 npm run start
 ```
-Tarayıcıda: http://localhost:3456
+Open in browser: http://localhost:3456
 
-## 📈 Strateji Uygulama
+## 📈 Implementing the Strategy
 
-### Adım 1: Fırsat Bul
-Dashboard'da veya CLI'da yüksek spread'li coinleri bul.
+### Step 1: Find Opportunity
+Use the dashboard or CLI to find high-spread assets.
 
-### Adım 2: Hedge Pozisyon Aç
-Örnek: SOL için spread %1300
+### Step 2: Open Hedged Position
+Example: SOL with 1300% spread
 
-| DEX | Pozisyon | Miktar | Funding |
-|-----|----------|--------|---------|
-| Drift | Long | 10 SOL | Alıyorsun |
-| Flash | Short | 10 SOL | Alıyorsun |
+| DEX | Position | Size | Funding |
+|-----|----------|------|---------|
+| Drift | Long | 10 SOL | Receiving |
+| Flash | Short | 10 SOL | Receiving |
 
-### Adım 3: Funding Topla
-Her 8 saatte bir (veya DEX'e göre değişir) funding ödemesi alırsın.
+### Step 3: Collect Funding
+Receive funding payments every 8 hours (varies by DEX).
 
-### Adım 4: Kapat
-Spread daralınca veya tersine dönünce pozisyonları kapat.
+### Step 4: Close When Done
+Close positions when spread narrows or reverses.
 
-## ⚠️ Riskler
+## ⚠️ Risks
 
-1. **Spread Değişimi**: Rate'ler hızla değişebilir
-2. **Execution Risk**: Slippage olabilir
-3. **Likidite**: Büyük pozisyonlarda sorun olabilir
-4. **Likidasyon**: Leverage kullanıyorsan dikkat!
-5. **Platform Riski**: Smart contract riski
+1. **Spread Reversal**: Rates can flip direction quickly
+2. **Execution Risk**: Slippage when opening/closing
+3. **Liquidity**: Large positions may face issues
+4. **Liquidation**: Be careful with leverage!
+5. **Platform Risk**: Smart contract risks exist
 
-## 💰 Tahmini Getiri
+## 💰 Expected Returns
 
-- Yüksek spread'lerde (>%500 APY fark) günlük %1-2
-- Orta spread'lerde (>%100 APY fark) günlük %0.1-0.5
-- Fee'ler ve slippage düşülmeli
+- High spreads (>500% APY diff): ~1-2% daily
+- Medium spreads (>100% APY diff): ~0.1-0.5% daily
+- Subtract fees and slippage from estimates
 
-## 🔐 Güvenlik
+## 🔐 Security
 
-- **Private key'ini asla paylaşma!**
-- `.env` dosyasını `.gitignore`'a ekle
-- Küçük miktarlarla başla
+- **Never share your private key!**
+- Add `.env` to `.gitignore`
+- Start with small amounts
 - DYOR (Do Your Own Research)
 
-## 🤝 Destek
+## 🔧 Advanced Configuration
+
+### Custom RPC Providers
+```env
+# Helius (recommended)
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+
+# Alchemy
+SOLANA_RPC_URL=https://solana-mainnet.g.alchemy.com/v2/YOUR_KEY
+
+# QuickNode
+SOLANA_RPC_URL=https://your-quicknode-endpoint.com
+```
+
+### Wallet Setup (For Future Execution)
+```env
+# Base58 private key (KEEP SECRET!)
+SOLANA_PRIVATE_KEY=your_private_key
+
+# Or keypair file path
+SOLANA_KEYPAIR_PATH=/path/to/keypair.json
+```
+
+## 🤝 Support
 
 - Discord: [Clawdbot Community](https://discord.com/invite/clawd)
-- GitHub: Issues açabilirsin
+- Issues: Open on GitHub
 
 ---
 
-*Bu araç sadece bilgilendirme amaçlıdır. Yatırım tavsiyesi değildir. Kendi araştırmanı yap ve sadece kaybetmeyi göze aldığın miktarla işlem yap.*
+*This tool is for informational purposes only. Not financial advice. Do your own research and only trade with funds you can afford to lose.*
