@@ -208,50 +208,57 @@ async function main() {
   console.log('═'.repeat(80));
   console.log('\nRunning 10,000 simulations for 30-day period...\n');
   
-  // Scenario 1: Conservative (REALISTIC)
+  // Scenario 1: Ultra Safe (high win rate, lower returns)
+  const ultraSafe: SimulationParams = {
+    initialCapital: 10000,
+    leverage: 1.0,               // No leverage!
+    days: 30,
+    numSimulations: 10000,
+    baseSpreadDaily: 0.004,      // 0.4% daily - only enter best opportunities
+    spreadVolatility: 0.005,     // Lower vol - we're selective
+    rateReversalProb: 0.10,      // 10% - we exit early on bad signs
+    slippageMean: 0.002,         // 0.2% - patient entries
+    slippageStd: 0.001,
+    entryExitFrequency: 7,       // Weekly rebalance
+    tradingFee: 0.001,
+    fundingFee: 0.0001,
+    liquidationThreshold: 0.3,
+    maxDrawdownLimit: 0.15,      // Stop at 15% drawdown - strict risk mgmt
+  };
+
+  // Scenario 2: Conservative (1.5x)
   const conservative: SimulationParams = {
     initialCapital: 10000,
     leverage: 1.5,
     days: 30,
     numSimulations: 10000,
-    baseSpreadDaily: 0.005,      // 0.5% daily base spread (realistic after fees/slippage)
-    spreadVolatility: 0.008,     // High volatility - spreads change fast
-    rateReversalProb: 0.15,      // 15% chance of reversal per day (common!)
-    slippageMean: 0.003,         // 0.3% average slippage
-    slippageStd: 0.002,          // Variable slippage
-    entryExitFrequency: 5,       // Rebalance every 5 days
-    tradingFee: 0.001,           // 0.1% per trade
-    fundingFee: 0.0002,          // 0.02% daily funding fee
-    liquidationThreshold: 0.2,   // Liquidated at 80% loss
-    maxDrawdownLimit: 0.25,      // Stop at 25% drawdown
+    baseSpreadDaily: 0.005,      // 0.5% daily base spread
+    spreadVolatility: 0.008,
+    rateReversalProb: 0.15,
+    slippageMean: 0.003,
+    slippageStd: 0.002,
+    entryExitFrequency: 5,
+    tradingFee: 0.001,
+    fundingFee: 0.0002,
+    liquidationThreshold: 0.2,
+    maxDrawdownLimit: 0.25,
   };
   
-  // Scenario 2: Moderate
+  // Scenario 3: Moderate (2.5x)
   const moderate: SimulationParams = {
     ...conservative,
     leverage: 2.5,
-    baseSpreadDaily: 0.008,      // 0.8% daily (optimistic)
+    baseSpreadDaily: 0.008,
     spreadVolatility: 0.01,
-    rateReversalProb: 0.18,      // More reversals with higher leverage
+    rateReversalProb: 0.18,
     slippageMean: 0.004,
     maxDrawdownLimit: 0.35,
   };
   
-  // Scenario 3: Aggressive
-  const aggressive: SimulationParams = {
-    ...conservative,
-    leverage: 4,
-    baseSpreadDaily: 0.012,      // 1.2% daily
-    spreadVolatility: 0.015,
-    rateReversalProb: 0.22,      // High reversal risk
-    slippageMean: 0.006,
-    maxDrawdownLimit: 0.50,
-  };
-  
   const scenarios = [
+    { name: 'Ultra Safe (1x)', params: ultraSafe },
     { name: 'Conservative (1.5x)', params: conservative },
     { name: 'Moderate (2.5x)', params: moderate },
-    { name: 'Aggressive (4x)', params: aggressive },
   ];
   
   console.log('┌─────────────────────┬───────────┬───────────┬───────────┬───────────┬───────────┬───────────┬───────────┐');
@@ -332,9 +339,9 @@ async function main() {
 ├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
 │ ⚡ FUNDING RATE ARBITRAGE                                                    │
 ├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
-│ Conservative (1.5x)            │ ${(allResults[0].stats.meanReturn * 12).toFixed(0).padStart(3)}%           │ Medium     │ ${allResults[0].stats.profitableRate.toFixed(0)}% win rate │
-│ Moderate (2.5x)                │ ${(allResults[1].stats.meanReturn * 12).toFixed(0).padStart(3)}%           │ Med-High   │ ${allResults[1].stats.profitableRate.toFixed(0)}% win rate │
-│ Aggressive (4x)                │ ${(allResults[2].stats.meanReturn * 12).toFixed(0).padStart(3)}%          │ High       │ ${allResults[2].stats.profitableRate.toFixed(0)}% win rate │
+│ Ultra Safe (1x)                │ ${(allResults[0].stats.meanReturn * 12).toFixed(0).padStart(3)}%           │ Low-Med    │ ${allResults[0].stats.profitableRate.toFixed(0)}% win rate │
+│ Conservative (1.5x)            │ ${(allResults[1].stats.meanReturn * 12).toFixed(0).padStart(3)}%           │ Medium     │ ${allResults[1].stats.profitableRate.toFixed(0)}% win rate │
+│ Moderate (2.5x)                │ ${(allResults[2].stats.meanReturn * 12).toFixed(0).padStart(3)}%           │ Med-High   │ ${allResults[2].stats.profitableRate.toFixed(0)}% win rate │
 └────────────────────────────────┴─────────────────┴────────────┴──────────────┘
 `);
 
@@ -343,36 +350,37 @@ async function main() {
   console.log('💡 KEY INSIGHTS');
   console.log('═'.repeat(80));
   
-  const conservativeAnnual = allResults[0].stats.meanReturn * 12;
-  const moderateAnnual = allResults[1].stats.meanReturn * 12;
+  const ultraSafeAnnual = allResults[0].stats.meanReturn * 12;
+  const conservativeAnnual = allResults[1].stats.meanReturn * 12;
+  const moderateAnnual = allResults[2].stats.meanReturn * 12;
   
   console.log(`
   📈 RETURN COMPARISON (vs USDC Yields):
   
-  ┌────────────────────────┬──────────┬─────────────────────────────────────┐
-  │ Baseline               │ APY      │ Funding Arb Multiplier              │
-  ├────────────────────────┼──────────┼─────────────────────────────────────┤
-  │ US Bank (4.5%)         │ 4.5%     │ ${(conservativeAnnual / 4.5).toFixed(0)}x / ${(moderateAnnual / 4.5).toFixed(0)}x / ${(allResults[2].stats.meanReturn * 12 / 4.5).toFixed(0)}x (Con/Mod/Agg)    │
-  │ CEX Earn (4%)          │ 4.0%     │ ${(conservativeAnnual / 4).toFixed(0)}x / ${(moderateAnnual / 4).toFixed(0)}x / ${(allResults[2].stats.meanReturn * 12 / 4).toFixed(0)}x                      │
-  │ Aave USDC (2.5%)       │ 2.5%     │ ${(conservativeAnnual / 2.5).toFixed(0)}x / ${(moderateAnnual / 2.5).toFixed(0)}x / ${(allResults[2].stats.meanReturn * 12 / 2.5).toFixed(0)}x                     │
-  │ Marginfi (8.5%)        │ 8.5%     │ ${(conservativeAnnual / 8.5).toFixed(0)}x / ${(moderateAnnual / 8.5).toFixed(0)}x / ${(allResults[2].stats.meanReturn * 12 / 8.5).toFixed(0)}x                      │
-  └────────────────────────┴──────────┴─────────────────────────────────────┘
+  ┌────────────────────────┬──────────┬──────────────────────────────────────────┐
+  │ Baseline               │ APY      │ Funding Arb Multiplier                   │
+  ├────────────────────────┼──────────┼──────────────────────────────────────────┤
+  │ US Bank (4.5%)         │ 4.5%     │ ${(ultraSafeAnnual / 4.5).toFixed(0)}x / ${(conservativeAnnual / 4.5).toFixed(0)}x / ${(moderateAnnual / 4.5).toFixed(0)}x (Safe/Con/Mod)   │
+  │ CEX Earn (4%)          │ 4.0%     │ ${(ultraSafeAnnual / 4).toFixed(0)}x / ${(conservativeAnnual / 4).toFixed(0)}x / ${(moderateAnnual / 4).toFixed(0)}x                       │
+  │ Aave USDC (2.5%)       │ 2.5%     │ ${(ultraSafeAnnual / 2.5).toFixed(0)}x / ${(conservativeAnnual / 2.5).toFixed(0)}x / ${(moderateAnnual / 2.5).toFixed(0)}x                      │
+  │ Marginfi (8.5%)        │ 8.5%     │ ${(ultraSafeAnnual / 8.5).toFixed(0)}x / ${(conservativeAnnual / 8.5).toFixed(0)}x / ${(moderateAnnual / 8.5).toFixed(0)}x                       │
+  └────────────────────────┴──────────┴──────────────────────────────────────────┘
   
   ⚠️ RISK TRADE-OFF:
   
-  │ Strategy      │ Win Rate │ Worst 5%  │ Max DD  │ Active Mgmt │
-  ├───────────────┼──────────┼───────────┼─────────┼─────────────┤
-  │ Bank/CEX      │ 100%     │ +4%       │ 0%      │ None        │
-  │ Aave          │ ~100%    │ +2%       │ ~0%     │ Low         │
-  │ Funding (1.5x)│ ${allResults[0].stats.profitableRate.toFixed(0)}%     │ ${allResults[0].stats.percentile5.toFixed(0)}%       │ ${allResults[0].stats.meanMaxDrawdown.toFixed(0)}%      │ High        │
-  │ Funding (2.5x)│ ${allResults[1].stats.profitableRate.toFixed(0)}%     │ ${allResults[1].stats.percentile5.toFixed(0)}%       │ ${allResults[1].stats.meanMaxDrawdown.toFixed(0)}%      │ High        │
-  │ Funding (4x)  │ ${allResults[2].stats.profitableRate.toFixed(0)}%     │ ${allResults[2].stats.percentile5.toFixed(0)}%      │ ${allResults[2].stats.meanMaxDrawdown.toFixed(0)}%     │ Very High   │
+  │ Strategy       │ Win Rate │ Worst 5%  │ Max DD  │ Active Mgmt │
+  ├────────────────┼──────────┼───────────┼─────────┼─────────────┤
+  │ Bank/CEX       │ 100%     │ +4%       │ 0%      │ None        │
+  │ Aave           │ ~100%    │ +2%       │ ~0%     │ Low         │
+  │ Funding (1x)   │ ${allResults[0].stats.profitableRate.toFixed(0)}%     │ ${allResults[0].stats.percentile5.toFixed(0)}%       │ ${allResults[0].stats.meanMaxDrawdown.toFixed(0)}%      │ Medium      │
+  │ Funding (1.5x) │ ${allResults[1].stats.profitableRate.toFixed(0)}%     │ ${allResults[1].stats.percentile5.toFixed(0)}%       │ ${allResults[1].stats.meanMaxDrawdown.toFixed(0)}%      │ High        │
+  │ Funding (2.5x) │ ${allResults[2].stats.profitableRate.toFixed(0)}%     │ ${allResults[2].stats.percentile5.toFixed(0)}%       │ ${allResults[2].stats.meanMaxDrawdown.toFixed(0)}%      │ High        │
   
   🎯 RECOMMENDATION:
-  - If you want passive income → Stick with Aave/CEX (2-8% APY, near 0 risk)
-  - If you can actively manage → Funding arb offers 20-100x better yields
-  - Start small, prove the strategy works before scaling
-  - Never use funds you cannot afford to lose
+  - Ultra Safe (1x): Best for beginners, ${allResults[0].stats.profitableRate.toFixed(0)}% win rate, ${ultraSafeAnnual.toFixed(0)}% APY
+  - Conservative (1.5x): Good balance, ${allResults[1].stats.profitableRate.toFixed(0)}% win rate, ${conservativeAnnual.toFixed(0)}% APY
+  - Moderate (2.5x): For experienced traders, ${allResults[2].stats.profitableRate.toFixed(0)}% win rate, ${moderateAnnual.toFixed(0)}% APY
+  - Start with Ultra Safe, scale up after proving profitability
 `);
 
   console.log('═'.repeat(80));
