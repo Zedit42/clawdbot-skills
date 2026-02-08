@@ -4,7 +4,7 @@
  * Fully automated trading bot for cross-DEX funding rate arbitrage
  * 
  * Strategy:
- * 1. Scan funding rates on Drift and Flash Trade
+ * 1. Scan funding rates on Drift and Backpack Trade
  * 2. Find pairs with significant spread (long where rate is negative, short where positive)
  * 3. Open delta-neutral positions to collect funding
  * 4. Monitor and rebalance when rates change
@@ -14,7 +14,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { DriftClient } from './drift-client';
-import { FlashClient } from './flash-client';
+import { BackpackClient } from './backpack-client';
 import { PositionManager, ArbitragePosition } from './position-manager';
 import { logger } from '../utils/logger';
 
@@ -33,6 +33,7 @@ export interface TraderConfig {
   check_interval_hours: number;
   min_apy_threshold: number;     // Min APY on either side
   max_position_usd: number;      // Max USD per position
+  rpc_url?: string;              // Solana RPC URL (Alchemy, Helius, etc)
   notification: {
     telegram: boolean;
     on_open: boolean;
@@ -51,14 +52,14 @@ export interface TraderConfig {
 export interface ArbitrageOpportunity {
   symbol: string;
   driftRate: number;      // APY
-  flashRate: number;      // APY
+  binanceRate: number;      // APY
   spread: number;         // Absolute spread
   recommendation: {
     driftSide: 'long' | 'short';
-    flashSide: 'long' | 'short';
+    binanceSide: 'long' | 'short';
   };
   driftPrice: number;
-  flashPrice: number;
+  binancePrice: number;
   confidence: number;     // 0-100
 }
 
@@ -73,15 +74,18 @@ export interface TraderState {
 export class AutoTrader {
   private config: TraderConfig;
   private driftClient: DriftClient;
-  private flashClient: FlashClient;
+  private backpackClient: BackpackClient;
   private positionManager: PositionManager;
   private state: TraderState;
   private isRunning: boolean = false;
   
-  constructor(rpcUrl: string = 'https://api.mainnet-beta.solana.com') {
+  constructor(rpcUrl?: string) {
     this.config = this.loadConfig();
-    this.driftClient = new DriftClient(rpcUrl, this.config.dry_run);
-    this.flashClient = new FlashClient(rpcUrl, this.config.dry_run);
+    // Use RPC from config, then param, then default
+    const finalRpcUrl = this.config.rpc_url || rpcUrl || 'https://api.mainnet-beta.solana.com';
+    logger.info(`Using RPC: ${finalRpcUrl.slice(0, 50)}...`);
+    this.driftClient = new DriftClient(finalRpcUrl, this.config.dry_run);
+    this.backpackClient = new BackpackClient(finalRpcUrl, this.config.dry_run);
     this.positionManager = new PositionManager();
     this.state = this.loadState();
   }
@@ -178,9 +182,9 @@ export class AutoTrader {
     const walletPath = process.env.SOLANA_WALLET_PATH;
     
     const driftInit = await this.driftClient.initializeWallet(walletPath);
-    const flashInit = await this.flashClient.initializeWallet(walletPath);
+    const binanceInit = await this.backpackClient.initializeWallet(walletPath);
 
-    if (!driftInit || !flashInit) {
+    if (!driftInit || !binanceInit) {
       logger.error('Failed to initialize one or more clients');
       return false;
     }
@@ -203,13 +207,13 @@ export class AutoTrader {
   async scanOpportunities(): Promise<ArbitrageOpportunity[]> {
     logger.info('\n📡 Scanning funding rates...');
 
-    const [driftMarkets, flashMarkets] = await Promise.all([
+    const [driftMarkets, binanceMarkets] = await Promise.all([
       this.driftClient.getMarkets(),
-      this.flashClient.getMarkets()
+      this.backpackClient.getMarkets()
     ]);
 
     logger.info(`  Drift: ${driftMarkets.length} markets`);
-    logger.info(`  Flash: ${flashMarkets.length} markets`);
+    logger.info(`  Backpack: ${binanceMarkets.length} markets`);
 
     const opportunities: ArbitrageOpportunity[] = [];
 
@@ -218,16 +222,16 @@ export class AutoTrader {
       // Normalize symbol (SOL-PERP, SOL, etc)
       const baseSymbol = driftM.symbol.replace('-PERP', '').replace('-USD', '');
       
-      const flashM = flashMarkets.find(f => {
-        const flashBase = f.symbol.replace('-PERP', '').replace('-USD', '');
-        return flashBase === baseSymbol;
+      const binanceM = binanceMarkets.find(f => {
+        const binanceBase = f.symbol.replace('-PERP', '').replace('-USD', '');
+        return binanceBase === baseSymbol;
       });
 
-      if (!flashM) continue;
+      if (!binanceM) continue;
 
       const driftApy = driftM.fundingRateApy;
-      const flashApy = flashM.fundingRateApy;
-      const spread = Math.abs(driftApy - flashApy);
+      const binanceApy = binanceM.fundingRateApy;
+      const spread = Math.abs(driftApy - binanceApy);
 
       // Skip if spread too low
       if (spread < this.config.min_spread * 100) continue;
@@ -236,20 +240,20 @@ export class AutoTrader {
       // If rate is negative, longs receive funding
       // If rate is positive, shorts receive funding
       let driftSide: 'long' | 'short';
-      let flashSide: 'long' | 'short';
+      let binanceSide: 'long' | 'short';
 
-      if (driftApy < flashApy) {
-        // Drift rate lower (more negative) = go long on Drift, short on Flash
+      if (driftApy < binanceApy) {
+        // Drift rate lower (more negative) = go long on Drift, short on Backpack
         driftSide = 'long';
-        flashSide = 'short';
+        binanceSide = 'short';
       } else {
-        // Flash rate lower = go long on Flash, short on Drift
+        // Backpack rate lower = go long on Backpack, short on Drift
         driftSide = 'short';
-        flashSide = 'long';
+        binanceSide = 'long';
       }
 
       // Calculate confidence based on spread and volume
-      const avgVolume = (driftM.volume24h + flashM.volume24h) / 2;
+      const avgVolume = (driftM.volume24h + binanceM.volume24h) / 2;
       const volumeScore = Math.min(avgVolume / 10000000, 1) * 50; // Max 50 from volume
       const spreadScore = Math.min(spread / 500, 1) * 50; // Max 50 from spread
       const confidence = Math.round(volumeScore + spreadScore);
@@ -257,11 +261,11 @@ export class AutoTrader {
       opportunities.push({
         symbol: baseSymbol,
         driftRate: driftApy,
-        flashRate: flashApy,
+        binanceRate: binanceApy,
         spread,
-        recommendation: { driftSide, flashSide },
+        recommendation: { driftSide, binanceSide },
         driftPrice: driftM.oraclePrice,
-        flashPrice: flashM.oraclePrice,
+        binancePrice: binanceM.oraclePrice,
         confidence
       });
     }
@@ -275,9 +279,9 @@ export class AutoTrader {
       logger.info('─────────────────────────────────────────────────────');
       for (const opp of opportunities.slice(0, 5)) {
         const driftEmoji = opp.driftRate < 0 ? '🟢' : '🔴';
-        const flashEmoji = opp.flashRate < 0 ? '🟢' : '🔴';
-        logger.info(`${opp.symbol.padEnd(6)} | Drift: ${driftEmoji} ${opp.driftRate.toFixed(0).padStart(6)}% | Flash: ${flashEmoji} ${opp.flashRate.toFixed(0).padStart(6)}% | Spread: ${opp.spread.toFixed(0)}%`);
-        logger.info(`        → ${opp.recommendation.driftSide.toUpperCase()} Drift, ${opp.recommendation.flashSide.toUpperCase()} Flash`);
+        const binanceEmoji = opp.binanceRate < 0 ? '🟢' : '🔴';
+        logger.info(`${opp.symbol.padEnd(6)} | Drift: ${driftEmoji} ${opp.driftRate.toFixed(0).padStart(6)}% | Backpack: ${binanceEmoji} ${opp.binanceRate.toFixed(0).padStart(6)}% | Spread: ${opp.spread.toFixed(0)}%`);
+        logger.info(`        → ${opp.recommendation.driftSide.toUpperCase()} Drift, ${opp.recommendation.binanceSide.toUpperCase()} Backpack`);
       }
       logger.info('─────────────────────────────────────────────────────');
     } else {
@@ -336,15 +340,15 @@ export class AutoTrader {
       return false;
     }
 
-    const flashResult = await this.flashClient.openPosition(
+    const binanceResult = await this.backpackClient.openPosition(
       `${opp.symbol}-PERP`,
-      opp.recommendation.flashSide,
+      opp.recommendation.binanceSide,
       positionSize / 2,
       this.config.leverage
     );
 
-    if (!flashResult.success) {
-      logger.error(`Flash position failed: ${flashResult.error}`);
+    if (!binanceResult.success) {
+      logger.error(`Backpack position failed: ${binanceResult.error}`);
       // Should close Drift position here in production
       return false;
     }
@@ -359,17 +363,17 @@ export class AutoTrader {
       driftResult.txSignature!
     );
 
-    const flashPos = this.positionManager.addPosition(
-      'flash',
+    const binancePos = this.positionManager.addPosition(
+      'binance',
       opp.symbol,
-      opp.recommendation.flashSide,
-      (positionSize / 2) / opp.flashPrice,
-      opp.flashPrice,
-      flashResult.txSignature!
+      opp.recommendation.binanceSide,
+      (positionSize / 2) / opp.binancePrice,
+      opp.binancePrice,
+      binanceResult.txSignature!
     );
 
     // Create arbitrage record
-    this.positionManager.createArbitrage(driftPos, flashPos, opp.spread);
+    this.positionManager.createArbitrage(driftPos, binancePos, opp.spread);
 
     this.state.totalTrades += 2;
     this.saveState();
@@ -404,21 +408,21 @@ export class AutoTrader {
     logger.debug(`Checking ${symbol} arbitrage (opened: ${new Date(arb.openTime).toISOString()})`);
 
     // Get current rates
-    const [driftMarkets, flashMarkets] = await Promise.all([
+    const [driftMarkets, binanceMarkets] = await Promise.all([
       this.driftClient.getMarkets(),
-      this.flashClient.getMarkets()
+      this.backpackClient.getMarkets()
     ]);
 
     const driftM = driftMarkets.find(m => m.symbol.includes(symbol));
-    const flashM = flashMarkets.find(m => m.symbol.includes(symbol));
+    const binanceM = binanceMarkets.find(m => m.symbol.includes(symbol));
 
-    if (!driftM || !flashM) {
+    if (!driftM || !binanceM) {
       logger.warn(`Cannot find current data for ${symbol}`);
       return;
     }
 
     // Calculate current spread
-    const currentSpread = Math.abs(driftM.fundingRateApy - flashM.fundingRateApy);
+    const currentSpread = Math.abs(driftM.fundingRateApy - binanceM.fundingRateApy);
     const spreadChange = currentSpread - arb.targetSpread;
 
     logger.info(`  ${symbol}: Spread ${arb.targetSpread.toFixed(0)}% → ${currentSpread.toFixed(0)}% (${spreadChange > 0 ? '+' : ''}${spreadChange.toFixed(0)}%)`);
@@ -454,9 +458,9 @@ export class AutoTrader {
 
     // Close both legs
     const driftResult = await this.driftClient.closePosition(`${arb.pair.long.symbol}-PERP`);
-    const flashResult = await this.flashClient.closePosition(`${arb.pair.short.symbol}-PERP`);
+    const binanceResult = await this.backpackClient.closePosition(`${arb.pair.short.symbol}-PERP`);
 
-    if (!driftResult.success || !flashResult.success) {
+    if (!driftResult.success || !binanceResult.success) {
       logger.error('Failed to close one or more positions');
       return false;
     }
@@ -468,7 +472,7 @@ export class AutoTrader {
 
     // Close positions in manager
     this.positionManager.closePosition(arb.pair.long.id, exitPrice, driftResult.txSignature!);
-    this.positionManager.closePosition(arb.pair.short.id, exitPrice, flashResult.txSignature!);
+    this.positionManager.closePosition(arb.pair.short.id, exitPrice, binanceResult.txSignature!);
     this.positionManager.closeArbitrage(arb.id);
 
     logger.info('✅ Arbitrage closed');
