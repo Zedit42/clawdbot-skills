@@ -12,6 +12,8 @@
     "scan:drift": "ts-node --transpile-only src/core/drift-aggregator.ts",
     "scan:zeta": "ts-node --transpile-only src/core/zeta-aggregator.ts",
     "dashboard": "ts-node --transpile-only src/dashboard/multi-dex-dashboard.ts",
+    "backtest": "ts-node --transpile-only backtest-1month.ts",
+    "monte-carlo": "ts-node --transpile-only monte-carlo.ts",
     "dev": "npm run dashboard"
   },
   "dependencies": {
