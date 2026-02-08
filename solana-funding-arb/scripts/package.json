@@ -1,7 +1,7 @@
 {
   "name": "solana-funding-arb",
-  "version": "1.0.0",
-  "description": "Solana DEX funding rate arbitrage scanner - find cross-DEX opportunities",
+  "version": "2.0.0",
+  "description": "Solana DEX funding rate arbitrage - scanner + auto-trader",
   "author": "Clawdbot Community",
   "license": "MIT",
   "type": "commonjs",
@@ -14,7 +14,12 @@
     "dashboard": "ts-node --transpile-only src/dashboard/multi-dex-dashboard.ts",
     "backtest": "ts-node --transpile-only backtest-1month.ts",
     "monte-carlo": "ts-node --transpile-only monte-carlo.ts",
-    "dev": "npm run dashboard"
+    "dev": "npm run dashboard",
+    
+    "trade": "ts-node --transpile-only src/trading/auto-trader.ts",
+    "trade:scan": "ts-node --transpile-only src/trading/auto-trader.ts --scan-only",
+    "trade:status": "ts-node --transpile-only src/trading/auto-trader.ts --status",
+    "trade:dry": "DRY_RUN=true ts-node --transpile-only src/trading/auto-trader.ts"
   },
   "dependencies": {
     "axios": "^1.6.0",
@@ -39,6 +44,8 @@
     "funding-rate",
     "arbitrage",
     "drift",
-    "perpetuals"
+    "flash-trade",
+    "perpetuals",
+    "auto-trader"
   ]
 }
