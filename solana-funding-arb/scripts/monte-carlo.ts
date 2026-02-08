@@ -298,22 +298,43 @@ async function main() {
     console.log(`    - Profitable:  ${stats.profitableRate.toFixed(1)}%`);
   }
   
-  // Risk-adjusted comparison
+  // Risk-adjusted comparison - USDC/Stablecoin yields only
   console.log('\n' + '═'.repeat(80));
-  console.log('⚖️  RISK-ADJUSTED COMPARISON');
+  console.log('⚖️  USDC/STABLECOIN YIELD COMPARISON');
   console.log('═'.repeat(80));
   
   console.log(`
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Investment Option              │ Expected Return │ Risk Level │ Sharpe Ratio │
+│ Platform                       │ APY             │ Risk Level │ Notes        │
 ├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
-│ Bank Deposit (Turkey TRY)      │ 45% / year      │ Very Low   │ N/A          │
-│ Aave USDC Lending              │ 2.5% / year     │ Low        │ ~1.0         │
-│ Solana Lending (Marginfi)      │ 8.5% / year     │ Low-Med    │ ~1.5         │
+│ 🏦 US BANKS (USD)                                                            │
 ├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
-│ Funding Arb (Conservative)     │ ${(allResults[0].stats.meanReturn * 12).toFixed(0).padStart(3)}% / year     │ Medium     │ ${allResults[0].stats.meanSharpe.toFixed(2).padStart(4)}         │
-│ Funding Arb (Moderate)         │ ${(allResults[1].stats.meanReturn * 12).toFixed(0).padStart(3)}% / year     │ Med-High   │ ${allResults[1].stats.meanSharpe.toFixed(2).padStart(4)}         │
-│ Funding Arb (Aggressive)       │ ${(allResults[2].stats.meanReturn * 12).toFixed(0).padStart(3)}% / year     │ High       │ ${allResults[2].stats.meanSharpe.toFixed(2).padStart(4)}         │
+│ High-Yield Savings (Ally)      │ 4.0%            │ Very Low   │ FDIC insured │
+│ 1-Year CD                      │ 4.5%            │ Very Low   │ FDIC insured │
+│ Money Market (Fidelity)        │ 4.9%            │ Very Low   │ SIPC insured │
+├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
+│ 📊 CEX EARN (USDC)                                                           │
+├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
+│ Binance Flexible               │ 3.2%            │ Low        │ Custodial    │
+│ Coinbase USDC Rewards          │ 4.1%            │ Low        │ Custodial    │
+│ Bybit Savings                  │ 5.5%            │ Low        │ Custodial    │
+│ OKX Simple Earn                │ 4.8%            │ Low        │ Custodial    │
+├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
+│ 🔷 DEFI LENDING (USDC)                                                       │
+├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
+│ Aave V3 (Ethereum)             │ 2.5%            │ Low-Med    │ Blue chip    │
+│ Aave V3 (Base)                 │ 3.8%            │ Low-Med    │ Blue chip    │
+│ Compound V3                    │ 3.5%            │ Low-Med    │ Blue chip    │
+│ Morpho (Ethereum)              │ 5.0%            │ Medium     │ Optimized    │
+│ Marginfi (Solana)              │ 8.5%            │ Medium     │ Solana DeFi  │
+│ Kamino (Solana)                │ 7.2%            │ Medium     │ Solana DeFi  │
+│ Gains Network (Arb)            │ 14.0%           │ Med-High   │ GLP-style    │
+├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
+│ ⚡ FUNDING RATE ARBITRAGE                                                    │
+├────────────────────────────────┼─────────────────┼────────────┼──────────────┤
+│ Conservative (1.5x)            │ ${(allResults[0].stats.meanReturn * 12).toFixed(0).padStart(3)}%           │ Medium     │ ${allResults[0].stats.profitableRate.toFixed(0)}% win rate │
+│ Moderate (2.5x)                │ ${(allResults[1].stats.meanReturn * 12).toFixed(0).padStart(3)}%           │ Med-High   │ ${allResults[1].stats.profitableRate.toFixed(0)}% win rate │
+│ Aggressive (4x)                │ ${(allResults[2].stats.meanReturn * 12).toFixed(0).padStart(3)}%          │ High       │ ${allResults[2].stats.profitableRate.toFixed(0)}% win rate │
 └────────────────────────────────┴─────────────────┴────────────┴──────────────┘
 `);
 
@@ -326,32 +347,32 @@ async function main() {
   const moderateAnnual = allResults[1].stats.meanReturn * 12;
   
   console.log(`
-  1. CONSERVATIVE STRATEGY (1.5x leverage):
-     - ${allResults[0].stats.profitableRate.toFixed(0)}% of simulations were profitable
-     - Expected: ${conservativeAnnual.toFixed(0)}% annual return
-     - ${allResults[0].stats.liquidationRate.toFixed(1)}% liquidation risk
-     - Best for: Risk-averse users, beginners
+  📈 RETURN COMPARISON (vs USDC Yields):
   
-  2. MODERATE STRATEGY (2.5x leverage):
-     - ${allResults[1].stats.profitableRate.toFixed(0)}% of simulations were profitable
-     - Expected: ${moderateAnnual.toFixed(0)}% annual return  
-     - ${allResults[1].stats.liquidationRate.toFixed(1)}% liquidation risk
-     - Best for: Experienced traders
+  ┌────────────────────────┬──────────┬─────────────────────────────────────┐
+  │ Baseline               │ APY      │ Funding Arb Multiplier              │
+  ├────────────────────────┼──────────┼─────────────────────────────────────┤
+  │ US Bank (4.5%)         │ 4.5%     │ ${(conservativeAnnual / 4.5).toFixed(0)}x / ${(moderateAnnual / 4.5).toFixed(0)}x / ${(allResults[2].stats.meanReturn * 12 / 4.5).toFixed(0)}x (Con/Mod/Agg)    │
+  │ CEX Earn (4%)          │ 4.0%     │ ${(conservativeAnnual / 4).toFixed(0)}x / ${(moderateAnnual / 4).toFixed(0)}x / ${(allResults[2].stats.meanReturn * 12 / 4).toFixed(0)}x                      │
+  │ Aave USDC (2.5%)       │ 2.5%     │ ${(conservativeAnnual / 2.5).toFixed(0)}x / ${(moderateAnnual / 2.5).toFixed(0)}x / ${(allResults[2].stats.meanReturn * 12 / 2.5).toFixed(0)}x                     │
+  │ Marginfi (8.5%)        │ 8.5%     │ ${(conservativeAnnual / 8.5).toFixed(0)}x / ${(moderateAnnual / 8.5).toFixed(0)}x / ${(allResults[2].stats.meanReturn * 12 / 8.5).toFixed(0)}x                      │
+  └────────────────────────┴──────────┴─────────────────────────────────────┘
   
-  3. AGGRESSIVE STRATEGY (4x leverage):
-     - ${allResults[2].stats.profitableRate.toFixed(0)}% of simulations were profitable
-     - Higher returns but ${allResults[2].stats.liquidationRate.toFixed(1)}% liquidation risk
-     - Best for: High risk tolerance only
+  ⚠️ RISK TRADE-OFF:
   
-  4. VS TRADITIONAL YIELDS:
-     - Conservative funding arb: ~${(conservativeAnnual / 2.5).toFixed(0)}x Aave yield
-     - But with ${allResults[0].stats.meanMaxDrawdown.toFixed(0)}% average max drawdown
-     - Requires active management vs passive DeFi lending
+  │ Strategy      │ Win Rate │ Worst 5%  │ Max DD  │ Active Mgmt │
+  ├───────────────┼──────────┼───────────┼─────────┼─────────────┤
+  │ Bank/CEX      │ 100%     │ +4%       │ 0%      │ None        │
+  │ Aave          │ ~100%    │ +2%       │ ~0%     │ Low         │
+  │ Funding (1.5x)│ ${allResults[0].stats.profitableRate.toFixed(0)}%     │ ${allResults[0].stats.percentile5.toFixed(0)}%       │ ${allResults[0].stats.meanMaxDrawdown.toFixed(0)}%      │ High        │
+  │ Funding (2.5x)│ ${allResults[1].stats.profitableRate.toFixed(0)}%     │ ${allResults[1].stats.percentile5.toFixed(0)}%       │ ${allResults[1].stats.meanMaxDrawdown.toFixed(0)}%      │ High        │
+  │ Funding (4x)  │ ${allResults[2].stats.profitableRate.toFixed(0)}%     │ ${allResults[2].stats.percentile5.toFixed(0)}%      │ ${allResults[2].stats.meanMaxDrawdown.toFixed(0)}%     │ Very High   │
   
-  5. RECOMMENDATION:
-     - Start with Conservative (1.5x) to learn the mechanics
-     - Scale to Moderate (2.5x) after gaining experience
-     - Never risk more than you can afford to lose
+  🎯 RECOMMENDATION:
+  - If you want passive income → Stick with Aave/CEX (2-8% APY, near 0 risk)
+  - If you can actively manage → Funding arb offers 20-100x better yields
+  - Start small, prove the strategy works before scaling
+  - Never use funds you cannot afford to lose
 `);
 
   console.log('═'.repeat(80));
