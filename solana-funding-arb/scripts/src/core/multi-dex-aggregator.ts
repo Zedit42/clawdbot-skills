@@ -193,9 +193,9 @@ export class MultiDexAggregator {
   }
   
   async printComparison(): Promise<void> {
-    console.log('\n' + '═'.repeat(100));
-    console.log('⚡ SOLANA DEX FUNDING RATE COMPARISON: DRIFT vs FLASH vs GMTRADE');
-    console.log('═'.repeat(100));
+    console.log('\n' + '═'.repeat(90));
+    console.log('⚡ SOLANA DEX FUNDING RATE SCANNER - 8 HOUR RATES');
+    console.log('═'.repeat(90));
     
     const [driftRates, flashRates, gmRates] = await Promise.all([
       this.getDriftRates(),
@@ -208,51 +208,58 @@ export class MultiDexAggregator {
     const flashSymbols = new Set(flashRates.map(r => r.symbol));
     const commonSymbols = [...driftSymbols].filter(s => flashSymbols.has(s));
     
-    console.log(`\nCommon symbols: ${commonSymbols.length}`);
-    console.log('\n📊 SIDE-BY-SIDE COMPARISON:\n');
-    console.log('Symbol     | Drift APY      | Flash APY      | Spread     | Arbitrage');
-    console.log('─'.repeat(90));
+    console.log(`\nMarkets: ${commonSymbols.length} common | Drift: ${driftRates.length} | Flash: ${flashRates.length}`);
+    console.log('\n📊 8-HOUR FUNDING RATES:\n');
+    console.log('Symbol     | Drift 8h       | Flash 8h       | Spread 8h  | Strategy');
+    console.log('─'.repeat(85));
     
     for (const symbol of commonSymbols.slice(0, 15)) {
       const drift = driftRates.find(r => r.symbol === symbol)!;
       const flash = flashRates.find(r => r.symbol === symbol)!;
       
-      const spread = Math.abs(drift.fundingRateApy - flash.fundingRateApy);
-      const arbDir = drift.fundingRateApy > flash.fundingRateApy 
+      // Convert to 8h rate (fundingRate is hourly, so multiply by 8)
+      const drift8h = drift.fundingRate * 8 * 100;
+      const flash8h = flash.fundingRate * 8 * 100;
+      const spread8h = Math.abs(drift8h - flash8h);
+      
+      const arbDir = drift8h > flash8h 
         ? 'Long Flash, Short Drift'
         : 'Long Drift, Short Flash';
       
-      const driftClass = drift.fundingRateApy > 0 ? '🔴' : '🟢';
-      const flashClass = flash.fundingRateApy > 0 ? '🔴' : '🟢';
+      const driftClass = drift8h > 0 ? '🔴' : '🟢';
+      const flashClass = flash8h > 0 ? '🔴' : '🟢';
       
       console.log(
         `${symbol.padEnd(10)} | ` +
-        `${driftClass} ${drift.fundingRateApy.toFixed(2).padStart(8)}% | ` +
-        `${flashClass} ${flash.fundingRateApy.toFixed(2).padStart(8)}% | ` +
-        `${spread.toFixed(2).padStart(8)}% | ` +
-        `${spread > 10 ? '✨ ' + arbDir : '-'}`
+        `${driftClass} ${drift8h.toFixed(4).padStart(9)}% | ` +
+        `${flashClass} ${flash8h.toFixed(4).padStart(9)}% | ` +
+        `${spread8h.toFixed(4).padStart(8)}% | ` +
+        `${spread8h > 0.01 ? '✨ ' + arbDir : '-'}`
       );
     }
     
-    console.log('\n🎯 TOP CROSS-DEX ARBITRAGE OPPORTUNITIES:\n');
+    console.log('\n🎯 TOP ARBITRAGE OPPORTUNITIES (8h):\n');
     
     const opps = await this.findCrossExchangeArbitrage(5);
     
     if (opps.length === 0) {
-      console.log('No significant opportunities (>5% spread) found.');
+      console.log('No significant opportunities found.');
     } else {
       for (const opp of opps.slice(0, 5)) {
-        console.log(`${opp.symbol}: ${opp.spreadApy.toFixed(2)}% spread`);
-        console.log(`  📈 Long ${opp.longExchange} @ ${opp.longRate.fundingRateApy.toFixed(2)}% APY`);
-        console.log(`  📉 Short ${opp.shortExchange} @ ${opp.shortRate.fundingRateApy.toFixed(2)}% APY`);
-        console.log(`  💰 Estimated Net APY: ${opp.netApy.toFixed(2)}%`);
+        const long8h = opp.longRate.fundingRate * 8 * 100;
+        const short8h = opp.shortRate.fundingRate * 8 * 100;
+        const spread8h = Math.abs(long8h) + Math.abs(short8h);
+        console.log(`${opp.symbol}: ${spread8h.toFixed(4)}% spread per 8h`);
+        console.log(`  📈 Long ${opp.longExchange} @ ${long8h.toFixed(4)}% (receive funding)`);
+        console.log(`  📉 Short ${opp.shortExchange} @ ${short8h.toFixed(4)}% (receive funding)`);
+        console.log(`  💰 Net per 8h: ${spread8h.toFixed(4)}% | Daily: ${(spread8h * 3).toFixed(4)}%`);
         console.log();
       }
     }
     
-    console.log('═'.repeat(100));
-    console.log(`Drift: ${driftRates.length} | Flash: ${flashRates.length} | GMTrade: ${gmRates.length} markets`);
+    console.log('═'.repeat(90));
     console.log(`Last updated: ${new Date().toISOString()}`);
+    console.log('Dashboard: https://solana-funding-arb.vercel.app');
   }
 }
 

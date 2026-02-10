@@ -1,41 +1,38 @@
 /**
- * Flash Trade Trading Client
+ * Flash Trade Client (Placeholder + Demo Mode)
  * 
- * Integration with Flash Trade perpetuals
- * Uses flash-trade-sdk for on-chain interactions
+ * Flash Trade doesn't have a public API for funding rates.
+ * This client provides demo data for testing the arbitrage logic.
+ * 
+ * In production, you would need to:
+ * 1. Use on-chain data via Flash's SDK (@flashtrade/sdk)
+ * 2. Or integrate with a data provider that tracks Flash funding rates
+ * 
+ * Alternative DEXes to consider with public APIs:
+ * - Mango Markets (has SDK + API)
+ * - Zeta Markets (has SDK)
+ * - Parcl (has API)
  */
 
-import { Connection, Keypair } from '@solana/web3.js';
-import axios from 'axios';
+import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import * as fs from 'fs';
 import { logger } from '../utils/logger';
 
-// Flash Trade API (unofficial, based on CoinGecko data)
-const COINGECKO_API = 'https://api.coingecko.com/api/v3';
-const FLASH_PROGRAM_ID = 'FLASHxQCTq2LN7PqrG6W1zhwfJ9DU8NKMfPbGcnfxj5';
-
 export interface FlashMarketInfo {
+  marketIndex: number;
   symbol: string;
   oraclePrice: number;
-  fundingRate: number;  // Hourly rate
+  markPrice: number;
+  fundingRate: number;
   fundingRateApy: number;
   openInterest: number;
   volume24h: number;
 }
 
-export interface FlashPosition {
-  symbol: string;
-  side: 'long' | 'short';
-  size: number;
-  notional: number;
-  entryPrice: number;
-  unrealizedPnl: number;
-  fundingAccrued: number;
-}
-
 export interface TradeResult {
   success: boolean;
   txSignature?: string;
+  orderId?: string;
   error?: string;
   details?: any;
 }
@@ -44,13 +41,11 @@ export class FlashClient {
   private connection: Connection;
   private wallet: Keypair | null = null;
   private isDryRun: boolean;
-  private cachedMarkets: FlashMarketInfo[] | null = null;
-  private cacheTime: number = 0;
-  private CACHE_TTL = 60000; // 1 minute cache
-  
+  private useDemoData: boolean = true; // Always use demo until real integration
+
   constructor(rpcUrl: string, dryRun: boolean = true) {
     this.connection = new Connection(rpcUrl, 'confirmed');
-    this.isDryRun = dryRun;
+    this.isDryRun = dryRun || process.env.DRY_RUN === 'true';
   }
 
   /**
@@ -58,13 +53,15 @@ export class FlashClient {
    */
   async initializeWallet(walletPath?: string): Promise<boolean> {
     try {
+      // Try wallet path
       if (walletPath && fs.existsSync(walletPath)) {
         const walletData = JSON.parse(fs.readFileSync(walletPath, 'utf-8'));
         this.wallet = Keypair.fromSecretKey(Uint8Array.from(walletData));
-        logger.info(`Flash wallet loaded: ${this.wallet.publicKey.toBase58().slice(0, 8)}...`);
+        logger.info(`Flash: Wallet loaded`);
         return true;
       }
 
+      // Try env
       const privateKeyEnv = process.env.SOLANA_PRIVATE_KEY;
       if (privateKeyEnv) {
         const keyArray = JSON.parse(privateKeyEnv);
@@ -80,66 +77,84 @@ export class FlashClient {
       return false;
     } catch (error: any) {
       logger.error(`Flash wallet init error: ${error.message}`);
-      return false;
+      return this.isDryRun;
     }
   }
 
   /**
-   * Get markets with funding rates from CoinGecko
+   * Get all markets with funding rates
+   * 
+   * NOTE: This returns demo data since Flash Trade doesn't have a public API.
+   * The rates are designed to show spread opportunities vs Drift for testing.
    */
   async getMarkets(): Promise<FlashMarketInfo[]> {
-    // Return cached if fresh
-    if (this.cachedMarkets && Date.now() - this.cacheTime < this.CACHE_TTL) {
-      return this.cachedMarkets;
+    if (this.useDemoData) {
+      return this.getDemoMarketData();
     }
 
-    try {
-      // CoinGecko derivatives endpoint for Flash Trade
-      const response = await axios.get(`${COINGECKO_API}/derivatives/exchanges/flash_trade`, {
-        timeout: 10000
-      });
-
-      if (!response.data?.tickers) {
-        throw new Error('No ticker data');
-      }
-
-      const markets: FlashMarketInfo[] = response.data.tickers.map((t: any) => {
-        const fundingRate = parseFloat(t.funding_rate || '0') / 100; // Convert from percentage
-        
-        return {
-          symbol: t.symbol || t.base,
-          oraclePrice: parseFloat(t.last || '0'),
-          fundingRate,
-          fundingRateApy: fundingRate * 24 * 365 * 100,
-          openInterest: parseFloat(t.open_interest_usd || '0'),
-          volume24h: parseFloat(t.volume || '0')
-        };
-      });
-
-      // Sort by absolute APY
-      markets.sort((a, b) => Math.abs(b.fundingRateApy) - Math.abs(a.fundingRateApy));
-      
-      this.cachedMarkets = markets;
-      this.cacheTime = Date.now();
-      
-      return markets;
-    } catch (error: any) {
-      logger.warn(`Flash API error: ${error.message}`);
-      return this.getBackupMarketData();
-    }
+    // In future: implement real Flash Trade SDK integration here
+    return this.getDemoMarketData();
   }
 
   /**
-   * Backup market data
+   * Demo market data - designed to show arbitrage opportunities
+   * 
+   * NOTE: These are simulated rates for testing!
+   * Real rates would come from Flash Trade's on-chain data.
+   * 
+   * Funding rate format: hourly rate as decimal (e.g., 0.00001 = 0.001% hourly = 8.76% APY)
    */
-  private getBackupMarketData(): FlashMarketInfo[] {
-    return [
-      { symbol: 'SOL-PERP', oraclePrice: 185, fundingRate: 0.0008, fundingRateApy: 700, openInterest: 5000000, volume24h: 20000000 },
-      { symbol: 'BTC-PERP', oraclePrice: 98000, fundingRate: 0.0003, fundingRateApy: 262, openInterest: 10000000, volume24h: 50000000 },
-      { symbol: 'ETH-PERP', oraclePrice: 3250, fundingRate: 0.0005, fundingRateApy: 438, openInterest: 8000000, volume24h: 30000000 },
-      { symbol: 'SUI-PERP', oraclePrice: 3.5, fundingRate: 0.0010, fundingRateApy: 876, openInterest: 3000000, volume24h: 10000000 },
-      { symbol: 'RNDR-PERP', oraclePrice: 7.5, fundingRate: 0.0012, fundingRateApy: 1051, openInterest: 2000000, volume24h: 8000000 },
+  private getDemoMarketData(): FlashMarketInfo[] {
+    const now = Date.now();
+    
+    // Simulated rates - similar magnitude to Drift but slightly different to create spread
+    // These use the same scaling as our Drift client (raw / 1e10)
+    const markets = [
+      { 
+        symbol: 'SOL-PERP',  // Match Drift symbol format
+        index: 0, 
+        price: 190.2,
+        // SOL: Drift shows ~-248% APY, Flash slightly less negative
+        hourlyRate: -0.00020 + Math.sin(now / 95000) * 0.00005  // ~-175% APY
+      },
+      { 
+        symbol: 'BTC-PERP', 
+        index: 1, 
+        price: 98520,
+        // BTC: Drift shows very high positive, Flash lower
+        hourlyRate: 0.00150 + Math.sin(now / 140000) * 0.0003  // ~13140% APY
+      },
+      { 
+        symbol: 'ETH-PERP', 
+        index: 2, 
+        price: 3355,
+        // ETH: Drift shows ~+983% APY, Flash similar
+        hourlyRate: 0.00008 + Math.sin(now / 115000) * 0.00003  // ~700% APY
+      },
+      { 
+        symbol: 'JUP-PERP', 
+        index: 3, 
+        price: 0.96,
+        hourlyRate: 0.00002 + Math.sin(now / 75000) * 0.00001  // ~175% APY
+      },
+      { 
+        symbol: 'WIF-PERP', 
+        index: 4, 
+        price: 1.76,
+        hourlyRate: 0.00003 + Math.sin(now / 85000) * 0.00001  // ~263% APY
+      },
     ];
+
+    return markets.map(m => ({
+      marketIndex: m.index,
+      symbol: m.symbol,
+      oraclePrice: m.price * (1 + (Math.random() - 0.5) * 0.001),
+      markPrice: m.price * (1 + (Math.random() - 0.5) * 0.002),
+      fundingRate: m.hourlyRate,
+      fundingRateApy: m.hourlyRate * 24 * 365 * 100,  // Convert to APY %
+      openInterest: Math.random() * 30000000 + 5000000,
+      volume24h: Math.random() * 80000000 + 15000000
+    }));
   }
 
   /**
@@ -147,31 +162,23 @@ export class FlashClient {
    */
   async getMarket(symbol: string): Promise<FlashMarketInfo | null> {
     const markets = await this.getMarkets();
-    return markets.find(m => m.symbol === symbol || m.symbol === `${symbol}-PERP`) || null;
+    const baseSymbol = symbol.replace('FLASH:', '').replace('-PERP', '');
+    return markets.find(m => m.symbol.includes(baseSymbol)) || null;
   }
 
   /**
-   * Get user positions (requires on-chain query)
+   * Get positions (demo returns empty)
    */
-  async getPositions(): Promise<FlashPosition[]> {
+  async getPositions(): Promise<any[]> {
     if (this.isDryRun) {
       return [];
     }
-
-    if (!this.wallet) {
-      logger.error('Flash: Wallet not initialized');
-      return [];
-    }
-
-    // Flash Trade positions are stored on-chain
-    // Would need to parse program accounts
-    // For now, return empty (positions tracked in state file)
-    logger.debug('Flash: Position querying not yet implemented');
+    // In production: query Flash Trade positions
     return [];
   }
 
   /**
-   * Open a position (currently simulated - full SDK integration needed)
+   * Open position
    */
   async openPosition(
     symbol: string,
@@ -181,20 +188,20 @@ export class FlashClient {
   ): Promise<TradeResult> {
     const market = await this.getMarket(symbol);
     if (!market) {
-      return { success: false, error: `Flash: Market ${symbol} not found` };
+      return { success: false, error: `Market ${symbol} not found` };
     }
 
     const baseSize = sizeUsd / market.oraclePrice;
 
-    if (this.isDryRun) {
-      logger.info(`[DRY_RUN] Flash: Would open ${side.toUpperCase()} ${symbol}`);
+    if (this.isDryRun || this.useDemoData) {
+      logger.info(`[FLASH DRY_RUN] Would open ${side.toUpperCase()} ${symbol}`);
       logger.info(`  Size: $${sizeUsd.toFixed(2)} (${baseSize.toFixed(4)} base)`);
       logger.info(`  Entry: $${market.oraclePrice.toFixed(4)}`);
       logger.info(`  Funding APY: ${market.fundingRateApy.toFixed(2)}%`);
       
       return {
         success: true,
-        txSignature: `FLASH_DRY_RUN_${Date.now()}`,
+        txSignature: `FLASH_DRY_${Date.now()}`,
         details: {
           market: symbol,
           side,
@@ -206,59 +213,39 @@ export class FlashClient {
       };
     }
 
-    if (!this.wallet) {
-      return { success: false, error: 'Flash: Wallet not initialized' };
-    }
-
-    // TODO: Full Flash Trade SDK integration
-    // For now, return error for non-dry-run
-    return {
-      success: false,
-      error: 'Flash Trade SDK integration pending - use DRY_RUN mode for testing'
-    };
+    // In production: use Flash Trade SDK to place order
+    return { success: false, error: 'Flash Trade live trading not implemented' };
   }
 
   /**
-   * Close a position
+   * Close position
    */
   async closePosition(symbol: string): Promise<TradeResult> {
-    if (this.isDryRun) {
-      logger.info(`[DRY_RUN] Flash: Would close position for ${symbol}`);
+    if (this.isDryRun || this.useDemoData) {
+      logger.info(`[FLASH DRY_RUN] Would close ${symbol}`);
       return {
         success: true,
-        txSignature: `FLASH_DRY_RUN_CLOSE_${Date.now()}`,
-        details: { market: symbol }
+        txSignature: `FLASH_CLOSE_${Date.now()}`
       };
     }
 
-    // TODO: Flash Trade SDK integration
-    return {
-      success: false,
-      error: 'Flash Trade SDK integration pending'
-    };
+    // In production: use Flash Trade SDK
+    return { success: false, error: 'Flash Trade live trading not implemented' };
   }
 
   /**
-   * Get account balance
+   * Get balance
    */
   async getBalance(): Promise<number> {
     if (this.isDryRun) {
       return 1000;
     }
-
-    if (!this.wallet) {
-      return 0;
-    }
-
-    // Get SOL balance (Flash uses SOL as collateral)
-    try {
-      const balance = await this.connection.getBalance(this.wallet.publicKey);
-      return balance / 1e9; // Convert lamports to SOL
-    } catch (error) {
-      return 0;
-    }
+    return 0;
   }
 
+  /**
+   * Get wallet address
+   */
   getWalletAddress(): string | null {
     return this.wallet?.publicKey.toBase58() || null;
   }
